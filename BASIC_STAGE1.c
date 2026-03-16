@@ -1552,8 +1552,8 @@ int main(int argc, char *argv[])
     /* HAL(3.0): replace stdout writes with serial tx */
     io_puts(FORK_NAME " " MKSTR(FORK_VER_MAJOR) "." MKSTR(FORK_VER_MINOR)
           "  (based on " BASE_VER_STR ")\n");
-    io_puts("Copyright 1982-2003 Dave Dunfield. "
-          "Modernized for GCC / ia16 / MinGW, " BUILD_YEAR ".\n");
+    io_puts("Original is Copyright 1982-2003 Dave Dunfield. \n"
+          "Modernized for Ansi-C, " BUILD_YEAR ".\n" "By D. Collins Z8D \n\n");
 
     setjmp(savjmp);
     for (;;) {

@@ -1,7 +1,5 @@
 # Enhanced Micro-Basic 3.0
 
-THIS IS A UNFINISHED WORKSPACE!
-
 A generative AI test to see if Claude.ai, using only the free plan (Sonnet 4.6),
 could cross-port the single-file BASIC example from David Dunfield's Micro-C
 compiler installer to GCC. We took this a few steps further and made it work with
@@ -12,6 +10,11 @@ single-file.
 
 **This was a successful project.**
 
+## 3.0 and Beyond
+
+The next bit we wanted to tackle was making Micro-Basic into a relocatable BASIC interpreter. It is by no means small like an assembly BASIC—if you want that, that is what you have to write—but this should run on a disk-based operating system with little issue, and is general enough at its core to run on a bare-metal environment. What I'll try to do is mock up something on an AVR using an SD-Card module to show how easy it is now to bring it to any other ANSI C compiler.
+
+For now the groundwork is here if you want to play around with it. Generally speaking you can stub out your own build and get things working that way. Everything here compiles for and runs on just about any console that Microsoft produced and also Linux. Have fun!
 ---
 
 ## What this is
@@ -28,6 +31,7 @@ Make something that could potentially be useful, the way that Micro-Basic was
 useful in the past. By that we mean: it's small, does what it says on the tin,
 and can be easily adapted to things like Z80 or 6809 natively in C without a
 bunch of messing around.
+
 
 ---
 
@@ -77,13 +81,13 @@ PRINT "done"
 
 Backward relative jumps (`-n`) are not supported and produce a syntax error. Line-counting always starts from the line containing the jump statement; `+1` skips one line forward.
 
-#### Segments 
-You can add program segments to a jump cache, which allows for faster jump refrence than direct / literal jumps with line numbers.  These can be combined with a relitive offset, either directly or with a variable creating a way to do complex jump tables and more complex logic based recursion.  This also provides a way of doing reverse refrence recursion.
+#### Segments
+You can add program segments to a jump cache, which allows for faster jump reference than direct/literal jumps with line numbers. These can be combined with a relative offset, either directly or with a variable creating a way to do complex jump tables and more complex logic based recursion. This also provides a way of doing reverse reference recursion.
 
-a segment is defined (SEG [n] = line number):
+A segment is defined (SEG [n] = line number):
 
 ```basic
-1 REM *** USUAL USEAGE: ***  
+1 REM *** USUAL USAGE: ***  
 2 SEG [1] = 1000             :REM Subroutine N+1
 5 Let N = 1
 10 PRINT "Count up: "
@@ -101,8 +105,8 @@ But also allowing for making a jump table:
 ```basic
 1 REM *** CODE SNIP FROM MANDELBROT EXAMPLE ***
 2 REM *** EARLY IN PROGRAM SEG STATEMENTS: 
-3 SEG [2] = 230   :REM Pixel Printer, represents a diferent level of recursion
-4 SEG [3] = 390   :REM EXIT point, this could also be a relitive jump with manual calculation.
+3 SEG [2] = 230   :REM Pixel Printer, represents a different level of recursion
+4 SEG [3] = 390   :REM EXIT point, this could also be a relative jump with manual calculation.
 
 205  REM Later on...
 210  O=I&7                  
@@ -236,21 +240,20 @@ PRINT STR$(A)          : REM  -1
 
 ## Documentation
 
-The `/documentation` folder contains:
+The `/documents` folder contains:
 
 - `MICRO-BASIC.bnf` — Backus-Naur Form grammar
 - `MICRO-BASIC-Manual.md` — full command reference and examples
 
 ## Building
 
-See [`BUILD.md`](BUILD.md) for full instructions. Quick reference:
+See `Makefile` or `documents/PORTING_GUIDE.md` for full instructions. Quick reference:
 
 ```
 make linux       # GCC / Linux
 make windows     # MinGW 32-bit cross
 make windows64   # MinGW 64-bit cross
 make dos         # ia16-elf-gcc, normal model
-make dos-small   # ia16-elf-gcc, SMALL_TARGET (64 KB)
 ```
 
 ## Binaries
