@@ -127,6 +127,8 @@ void     io_error(int code);
  * The implementation is in the target-specific io_xxx.c file. */
 void     io_exit(int code);
 
+int      io_system(const char *cmd);
+
 /* =======================================================================
  * Workspace Interface (for 3.0 bare metal port)
  * ======================================================================= */

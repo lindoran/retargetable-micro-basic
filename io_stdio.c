@@ -164,6 +164,7 @@ void io_free(void *ptr)
 
 void io_error(int code)
 {
+    (void)code;
     /* On hosted systems, io_error() is only called from io_alloc() failure.
      * The interpreter's error() function is in BASIC.c and does the normal
      * error reporting. This is the fatal "out of memory" path. */
@@ -174,6 +175,21 @@ void io_error(int code)
 void io_exit(int code)
 {
     exit(code);
+}
+
+int io_system(const char *cmd)
+{
+#if defined(__ia16__) || defined(__MSDOS__) || defined(_MSDOS)
+#  if defined(_DOS_SYSTEM_DEFINED)
+    if (!cmd) return -1;
+    return _dos_system(cmd);
+#  else
+    (void)cmd;
+    return -1;
+#  endif
+#else
+    return system(cmd);
+#endif
 }
 
 /* ======================================================================= */

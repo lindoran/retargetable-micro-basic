@@ -78,11 +78,12 @@
  *
  * Modernization notes (2026):
  *   - Explicit semantic typedefs (bint/ubint/bptr) replace raw int/unsigned.
- *     To retarget (Z80/SDCC, 6809/GCC6809, etc.) adjust the typedef block
- *     below only; no other changes are needed for the numeric types.
+ *     These live in `basic_types.h`; update that header when retargeting
+ *     (Z80/SDCC, 6809/GCC6809, etc.).
  *   - All functions have explicit return types and forward declarations.
  *   - Token bytes handled via tok_t type and TOKEN(x) macro throughout.
- *   - Platform HAL (#ifdef block) isolates BEEP/DELAY/KEY/INP/OUT.
+ *   - Platform HAL (#ifdef block) now lives in `hal_hosted.c`; BASIC_STAGE1.c
+ *     just includes `hal_base.h` so relocatable builds can replace it.
  *   - File modes "rv"/"wv" -> "rb"/"wb" (Micro-C verbatim -> standard).
  *   - concat(), random() replaced with local/standard equivalents.
  *   - fgets() CR/LF stripping added (Micro-C I/O stripped these implicitly).
@@ -129,368 +130,16 @@
 #include <stdint.h>
 #include <time.h>
 #include "io.h"
+#include "hal_base.h"
+#include "basic_defs.h"
+#include "basic_keywords.h"
 
-/* =======================================================================
- * Portable type aliases
- *
- * bint  : the native BASIC integer - signed 16-bit on all current targets.
- *         On Z80 (SDCC) or 6809 (GCC6809) this stays int16_t; the
- *         compiler's own int is also 16-bit there, but being explicit is
- *         safer across compilers.
- *
- * ubint : unsigned form of bint - for bit ops, array indices, and anywhere
- *         the value is known non-negative (line numbers, dim sizes, etc.).
- *
- * bptr  : must be wide enough to hold a data pointer on the target.
- *         The control stack stores both small bint values (step, limit,
- *         variable index) AND pointers (runptr, cmdptr), so it must use
- *         bptr throughout.
- *         - DOS/ia16 near model : uint16_t  (same as ubint, flat 64 KB)
- *         - DOS/ia16 far model  : uint32_t
- *         - 32-bit hosts        : uint32_t  (via uintptr_t)
- *         - 64-bit hosts        : uint64_t  (via uintptr_t)
- *         For a Z80 flat space  : typedef uint16_t bptr;
- * ======================================================================= */
-typedef int16_t   bint;     /* BASIC numeric type   - signed 16-bit         */
-typedef uint16_t  ubint;    /* BASIC unsigned type  - unsigned 16-bit        */
-typedef uintptr_t bptr;     /* pointer-width slot   - ctl_stk entries        */
-
-/* =======================================================================
- * tok_t - the type for a single byte read from a tokenised line.
- * Using a named type removes all the scattered (signed char) casts.
- *
- * TOKEN(k)  -> the byte stored in the token stream for keyword index k
- * IS_TOK(c) -> true if byte c is a token (high bit set / value negative)
- * ======================================================================= */
-typedef signed char tok_t;
-#define TOKEN(k)   ((tok_t)((k) | 0x80))
-#define IS_TOK(c)  ((tok_t)(c) < 0)
-
-/* =======================================================================
- * Platform detection & Hardware Abstraction Layer
- * Exports: do_beep(freq,ms)  do_delay(ms)  kbtst()  do_in(p)  do_out(p,v)
- * ======================================================================= */
-
-#if defined(__ia16__) || defined(__MSDOS__) || defined(_MSDOS)
-/* -----------------------------------------------------------------------
- * Real DOS: ia16-elf-gcc + libi86, DJGPP, Open Watcom, Turbo C, etc.
- *
- * Port I/O: libi86 and Open Watcom use outp()/inp() from <conio.h>.
- *           Borland Turbo C uses outportb()/inportb() from <dos.h>.
- *           We prefer the Watcom/libi86 names; <dos.h> is NOT included
- *           because its far-pointer typedefs break under -mcmodel=small
- *           with ia16-elf-gcc.
- *
- * delay():  lives in <conio.h> under libi86.  Under DJGPP / Watcom it is
- *           in <dos.h> — if your toolchain puts it there, add <dos.h>
- *           and remove the inline-asm fallback below.
- *
- * Borland target: replace outp/inp with outportb/inportb and add
- *           #include <dos.h> (Borland's dos.h does not use far ptrs).
- * ----------------------------------------------------------------------- */
-#  include <conio.h>
-
-/* delay() is in <conio.h> under libi86.  Provide a BIOS-tick fallback
- * for toolchains that lack it (e.g. bare newlib without libi86).        */
-#  if !defined(__LIBI86_COMPILING__) && !defined(delay)
-static void delay(ubint ms)
-{
-    /* INT 1Ah AH=00h: read BIOS tick counter (18.2 ticks/sec ~= 1/55ms) */
-    unsigned int ticks = ms / 55u + 1u;
-    unsigned int start_hi, start_lo, now_hi, now_lo;
-    __asm__ volatile (
-        "int $0x1a"
-        : "=c"(start_hi), "=d"(start_lo)
-        : "a"((unsigned int)0x0000)
-        : "cc"
-    );
-    for (;;) {
-        __asm__ volatile (
-            "int $0x1a"
-            : "=c"(now_hi), "=d"(now_lo)
-            : "a"((unsigned int)0x0000)
-            : "cc"
-        );
-        /* compare low word only - wraps ~every 24h, fine for short delays */
-        if ((unsigned int)(now_lo - start_lo) >= ticks) break;
-    }
-}
-#  endif
-
-static void do_beep(ubint freq, ubint ms)
-{
-    ubint divisor = (ubint)(1193180UL / freq);
-    outp(0x43, 0xB6);
-    outp(0x42, (uint8_t)(divisor & 0xFF));
-    outp(0x42, (uint8_t)(divisor >> 8));
-    outp(0x61, (uint8_t)(inp(0x61) | 0x03));
-    delay(ms);
-    outp(0x61, (uint8_t)(inp(0x61) & ~0x03));
-}
-static void  do_delay(ubint ms)          { delay(ms); }
-static bint  kbtst(void)                 { return (bint)(kbhit() ? getch() : 0); }
-static ubint do_in(ubint p)              { return (ubint)inp(p); }
-static void  do_out(ubint p, ubint v)    { outp(p, (uint8_t)v); }
-
-#elif defined(__MINGW32__) || defined(__MINGW64__) || defined(_WIN32)
-/* -----------------------------------------------------------------------
- * Windows: MinGW 32/64, MSVC
- * ----------------------------------------------------------------------- */
-#  include <windows.h>
-#  include <conio.h>
-
-static void  do_beep(ubint freq, ubint ms) { Beep(freq, ms); }
-static void  do_delay(ubint ms)            { Sleep(ms); }
-static bint  kbtst(void)  { return (bint)(_kbhit() ? _getch() : 0); }
-static ubint do_in(ubint p)               { (void)p; return 0; }
-static void  do_out(ubint p, ubint v)     { (void)p; (void)v; }
-
-#else
-/* -----------------------------------------------------------------------
- * POSIX: Linux / macOS
- * BEEP  -> terminal bell       DELAY -> nanosleep (or clock() fallback)
- * KEY   -> non-blocking termios read
- * INP/OUT -> no-ops (no user-mode port access on protected-mode OS)
- * -----------------------------------------------------------------------
- * Note: stdio.h is included here for getchar() and EOF in kbtst().
- * This is platform-specific HAL code, not interpreter logic.
- * ----------------------------------------------------------------------- */
-#  include <stdio.h>
-#  include <time.h>
-#  ifndef NO_BEEP
-#    include <alsa/asoundlib.h>
-#    include "tinybeep.h"
-static void do_beep(ubint freq, ubint ms) { tinybeep(freq, ms); }
-#  else
-static void do_beep(ubint freq, ubint ms) { (void)freq; (void)ms; }
-#  endif
-
-static void do_delay(ubint ms)
-{
-#  if defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 199309L
-    struct timespec ts;
-    ts.tv_sec  = ms / 1000;
-    ts.tv_nsec = (long)(ms % 1000) * 1000000L;
-    nanosleep(&ts, NULL);
-#  else
-    clock_t end = clock() + (clock_t)(ms * (CLOCKS_PER_SEC / 1000));
-    while (clock() < end) ;
-#  endif
-}
-
-#  include <unistd.h>
-#  include <termios.h>
-#  include <fcntl.h>
-
-static bint kbtst(void)
-{
-    struct termios oldt, newt;
-    int ch, oldf;
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-    newt.c_lflag &= (tcflag_t)~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
-    ch = getchar();
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    fcntl(STDIN_FILENO, F_SETFL, oldf);
-    return (bint)((ch == EOF) ? 0 : ch);
-}
-static ubint do_in(ubint p)           { (void)p; return 0; }
-static void  do_out(ubint p, ubint v) { (void)p; (void)v; }
-
-#endif /* platform HAL */
-
-/* =======================================================================
- * RODATA / RD_BYTE / RD_PTR  — ROM vs RAM address space abstraction
- *
- * On Von Neumann targets (ia16, Z80, 6809, x86) there is one address
- * space; RODATA is just 'const' and the read macros are plain dereferences.
- * The linker places const data in the ROM/flash segment automatically.
- *
- * On Harvard targets (AVR) flash and RAM are separate buses.  String
- * tables must be declared PROGMEM and read back via pgm_read_byte /
- * pgm_read_word — normal pointer dereference will read RAM, not flash.
- *
- * To test the macro layer on a hosted build without real AVR hardware,
- * compile with -DTEST_RODATA.  All macros collapse to normal dereferences
- * so behaviour is identical, but every access goes through the macro path.
- *
- * AVR / Arduino usage:
- *   Compile with -DAVR_PROGMEM (the Arduino toolchain defines __AVR__
- *   automatically; you can also key off that if preferred).
- *
- * RD_BYTE(p)  : read one char/uint8 from a RODATA pointer
- * RD_PTR(pp)  : read one (const char *) from a RODATA pointer-to-pointer
- *               (used to walk reserved_words[] and error_messages[])
- * ======================================================================= */
-
-#if defined(AVR_PROGMEM) || defined(__AVR__)
-#  include <avr/pgmspace.h>
-#  define RODATA          PROGMEM
-#  define RD_BYTE(p)      pgm_read_byte(p)
-#  define RD_PTR(pp)      ((const char *)pgm_read_word(pp))
-#else
-   /* Von Neumann / hosted: plain dereference, const goes to .rodata      */
-#  define RODATA          /* nothing */
-#  define RD_BYTE(p)      (*(const uint8_t *)(p))
-#  define RD_PTR(pp)      (*(pp))
-#endif
-
-/* =======================================================================
- * Interpreter constants
- * ======================================================================= */
-
-/* =======================================================================
- * Build-time tuning
- *
- * Define SMALL_TARGET before including / compiling to get a configuration
- * suited to a 64 KB address space (Z80, 6809, AVR, ia16 small model).
- * Individual defines can also be overridden on the compiler command line:
- *   gcc -DBUFFER_SIZE=80 -DNUM_VAR=130 ...
- *
- * BUFFER_SIZE : input line buffer and scratch (bytes)
- * SA_SIZE     : string expression accumulator capacity (bytes)
- *               Must be >= the longest string your program uses.
- * NUM_VAR     : variable slots.  Always (26 * digits_per_letter).
- *               Full set  : 26*10 = 260  (A0..Z9)
- *               Half set  : 26*5  = 130  (A0..Z4)
- *               Minimal   : 26*2  =  52  (A0..Z1, i.e. A,B..Z + one extra)
- * CTL_DEPTH   : control stack depth (FOR + GOSUB frames combined).
- *               Each GOSUB frame = 3 slots, each FOR frame = 6 slots.
- * MAX_FILES   : number of user-accessible file handles (#0 .. #MAX_FILES-1)
- *               CP/M, FLEX, and most small DOSes support 4 open files fine.
- *
- * NOTE(stack): eval_sub() expression depth is capped at 8 levels via the
- *   nest counter; error(13) "Expression too deep" is raised cleanly on
- *   overflow.  Sufficient for all practical integer BASIC programs.
- * ======================================================================= */
-
-#ifdef SMALL_TARGET
-#  ifndef BUFFER_SIZE
-#    define BUFFER_SIZE   80   /* trim 20 bytes vs default                  */
-#  endif
-#  ifndef SA_SIZE
-#    define SA_SIZE       80   /* must be >= BUFFER_SIZE; string literals land here after buffering */
-#  endif
-#  ifndef NUM_VAR
-#    define NUM_VAR      130   /* A0..Z4 : 26*5, halves variable table RAM  */
-#  endif
-#  ifndef CTL_DEPTH
-#    define CTL_DEPTH     24   /* ~4 nested FOR loops or 8 GOSUBs           */
-#  endif
-#  ifndef MAX_FILES
-#    define MAX_FILES      4   /* #0..#3 : enough for CP/M, FLEX, small DOS */
-#  endif
-#  ifndef SEG_SLOTS
-#    define SEG_SLOTS      8   /* [1]..[8] segment cache entries             */
-#  endif
-#else
-#  ifndef BUFFER_SIZE
-#    define BUFFER_SIZE  100
-#  endif
-#  ifndef SA_SIZE
-#    define SA_SIZE      100
-#  endif
-#  ifndef NUM_VAR
-#    define NUM_VAR      260   /* A0..Z9 : full variable set                */
-#  endif
-#  ifndef CTL_DEPTH
-#    define CTL_DEPTH     50
-#  endif
-#  ifndef MAX_FILES
-#    define MAX_FILES     10   /* #0..#9                                    */
-#  endif
-#  ifndef SEG_SLOTS
-#    define SEG_SLOTS     16   /* [1]..[16] segment cache entries            */
-#  endif
-#endif
-
-/* SA_SIZE must be at least BUFFER_SIZE: a string literal is read into
- * buffer[] first, then copied into sa1[].  If SA_SIZE < BUFFER_SIZE
- * a long literal overflows sa1.                                          */
-#if SA_SIZE < BUFFER_SIZE
-#  error "SA_SIZE must be >= BUFFER_SIZE (string literals are buffered first)"
-#endif
+/* The macros in basic_defs.h and basic_keywords.h replace the previous #if
+ * blocks for RODATA/BUFFER_SIZE/segments and the keyword tokens. */
 
 /* Control stack frame tags - outside bint range so never confused with data */
 #define _FOR   1000
 #define _GOSUB (_FOR + 1)
-
-/* Primary keyword tokens (1-based; 0 = not found) */
-#define LET     1
-#define EXIT    2
-#define LIST    3
-#define NEW     4
-#define RUN     5
-#define CLEAR   6
-#define GOSUB   7
-#define GOTO    8
-#define RETURN  9
-#define PRINT  10
-#define FOR    11
-#define NEXT   12
-#define IF     13
-#define LIF    14
-#define REM    15
-#define STOP   16
-#define END    17
-#define INPUT  18
-#define OPEN   19
-#define CLOSE  20
-#define DIM    21
-#define ORDER  22
-#define READ   23
-#define DATA   24
-#define SAVE   25
-#define LOAD   26
-#define DELAY  27
-#define BEEP   28
-#define DOS    29
-#ifdef OUT
-#undef OUT   /* MinGW's windows.h defines OUT as an empty annotation macro */
-#endif
-#define OUT    30
-#define SEG    31
-
-/* Secondary keyword tokens */
-#define TO     32   /* lower bound of keyword range used in is_e_end() */
-#define STEP   33
-#define THEN   34
-
-/* Operator / function tokens */
-#define ADD    35   /* lower bound of operator range used in is_e_end() */
-#define SUB    36
-#define MUL    37
-#define DIV    38
-#define MOD    39
-#define AND    40
-#define OR     41
-#define XOR    42
-#define EQ     43
-#define NE     44
-#define LE     45
-#define SHL    46   /* TODO(bitshift): <<  logical left shift               */
-#define LT     47
-#define GE     48
-#define SHR    49   /* TODO(bitshift): >>  logical right shift              */
-#define GT     50
-#define CHR    51
-#define STR    52
-#define ASC    53
-#define ABS    54
-#define NUM    55
-#define RND    56
-#define KEY    57
-#define INP    58
-#define HEX    59   /* HEX$(n) - format bint as uppercase hex string        */
-#define UNS    60   /* UNS$(n) - format bint as unsigned decimal string     */
-#define UGT    61   /* UGT(a,b) - unsigned greater-than, returns 1/0        */
-#define ULT    62   /* ULT(a,b) - unsigned less-than, returns 1/0           */
-
-/* Pseudo-command: RUN without clearing variables (used by LOAD-in-program) */
-#define RUN1   99
 
 /* Operator priority table, indexed from 0 by (op_token - (ADD-1)).
  * Index = token - 33.
@@ -501,7 +150,7 @@ static void  do_out(ubint p, ubint v) { (void)p; (void)v; }
  * 14   : GE                                (>=)
  * 15   : SHR                               (>> priority 3 = same as & | ^)
  * 16   : GT                                (>)
- * TODO(bitshift): SHL/SHR slots at 12 and 15. */
+ * SHL/SHR share the bitwise precedence group with & | ^; shifts are genuine tokens. */
 static const uint8_t RODATA priority[] = {
     0,                /* 0  sentinel                                        */
     1, 1, 2, 2, 2,    /* 1- 5: ADD SUB MUL DIV MOD                         */
@@ -726,7 +375,7 @@ static ubint lookup(const char * const RODATA table[])
 /* =======================================================================
  * get_num() - parse a numeric literal from cmdptr.
  *
- * TODO(literals): Dunfield-style prefix notation.
+ * Supported literal prefixes:
  *   #xxxx  hexadecimal   e.g. #FF, #1A2B
  *   @dddd  unsigned dec  e.g. @65535, @32768
  *   dddd   signed dec    unchanged (no prefix)
@@ -986,6 +635,7 @@ static struct line_rec *execute(tok_t cmd)
     /* ---- EXIT ---------------------------------------------------------- */
     case EXIT :
         io_exit(0);
+        break;
 
     /* ---- LIST [start[,end]] ------------------------------------------- */
     case LIST :
@@ -1306,18 +956,7 @@ newline:
     /* ---- DOS "command" ------------------------------------------------- */
     case DOS :
         eval_char();
-#if defined(__ia16__) || defined(__MSDOS__) || defined(_MSDOS)
-        /* newlib for ia16 does not provide system(); use INT 21h AH=4Bh
-         * (EXEC) via libi86's _dos_system() if available, otherwise no-op */
-#   if defined(_DOS_SYSTEM_DEFINED)
-        { int r = _dos_system(sa1); (void)r; }
-#   else
-        (void)sa1;
-#   endif
-#else
-        /* HAL(3.0): no OS shell on bare metal — no-op or remove DOS statement */
-        { int r = system(sa1); (void)r; }
-#endif
+        io_system(sa1); /* HAL handles platform-specific exec/no-op */
         break;
 
     /* ---- OUT port,val -------------------------------------------------- */
@@ -1537,8 +1176,6 @@ static bint get_value(void)
     tok_t c     = skip_blank();
 
     if (isdigit((unsigned char)c) || c == '#' || c == '@') {
-        /* TODO(literals): plain decimal OR prefixed literal (#hex, @udec).
-         * get_num() reads the prefix itself from *cmdptr.                  */
         expr_type = 0;
         value     = (bint)get_num();
     } else {
@@ -1849,23 +1486,13 @@ static ubint get_var(void)
  * ======================================================================= */
 int main(int argc, char *argv[])
 {
-   
-/* supress error messages from ALSA's libsndfile when built with TINYBEEP support
-   some of these are status messages that are not actually errors - this keeps
-   the console for basic only. */ 
-
-#ifdef TINYBEEP_H
-
-    snd_lib_error_set_handler(NULL);  /* silence ALSA internal messages */
-
-#endif
-
     /* 
        
        TODO: Implement XOR SHFIT for RND in 8 bit targets for 3.0 relese 
        will need a stub to manage this seed as well from whatever is aval.
     
      */
+    hal_init_audio();
     srand((unsigned)time(NULL));  /* seed RND() from current time */
     
     int   i;

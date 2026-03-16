@@ -29,7 +29,11 @@
 
 # Source files
 INTERPRETER = BASIC_STAGE1.c
-IO_STDIO    = io_stdio.c
+# Target-specific stubs that pick the proper HAL implementation.
+LINUX_STUB     = stubs/linux_stub.c
+WINDOWS_STUB   = stubs/windows_stub.c
+WINDOWS64_STUB = stubs/windows64_stub.c
+DOS_STUB       = stubs/dos_stub.c
 IO_AVR      = io_avr.c
 LEXER       = lexer.c
 
@@ -103,19 +107,19 @@ endef
 # =============================================================================
 # Linux (with optional ALSA sound)
 # =============================================================================
-linux: dirs $(INTERPRETER_DEPS) $(IO_STDIO)
+linux: dirs $(INTERPRETER_DEPS) $(LINUX_STUB)
 	mkdir -p $(BIN_DIR)/linux
 ifeq ($(HAVE_ALSA),1)
 	@if [ -f tinybeep.c ]; then \
 		echo "Building with ALSA sound..."; \
-		gcc $(CFLAGS) -o $(BIN_DIR)/linux/basic $(INTERPRETER_DEPS) $(IO_STDIO) tinybeep.c -lasound; \
+		gcc $(CFLAGS) -o $(BIN_DIR)/linux/basic $(INTERPRETER_DEPS) $(LINUX_STUB) tinybeep.c -lasound; \
 	else \
 		echo "Building without sound (tinybeep.c not found)..."; \
-		gcc $(CFLAGS) -DNO_BEEP -o $(BIN_DIR)/linux/basic $(INTERPRETER_DEPS) $(IO_STDIO); \
+		gcc $(CFLAGS) -DNO_BEEP -o $(BIN_DIR)/linux/basic $(INTERPRETER_DEPS) $(LINUX_STUB); \
 	fi
 else
 	@echo "Building without ALSA sound..."
-	gcc $(CFLAGS) -DNO_BEEP -o $(BIN_DIR)/linux/basic $(INTERPRETER_DEPS) $(IO_STDIO)
+	gcc $(CFLAGS) -DNO_BEEP -o $(BIN_DIR)/linux/basic $(INTERPRETER_DEPS) $(LINUX_STUB)
 endif
 	@echo "Built: $(BIN_DIR)/linux/basic"
 	$(MAKE) package-linux
@@ -130,27 +134,27 @@ linux-nobeep: dirs $(INTERPRETER_DEPS) $(IO_STDIO)
 # =============================================================================
 # Windows 32-bit (MinGW i686)
 # =============================================================================
-windows: dirs $(INTERPRETER_DEPS) $(IO_STDIO)
+windows: dirs $(INTERPRETER_DEPS) $(WINDOWS_STUB)
 	mkdir -p $(BIN_DIR)/windows
-	i686-w64-mingw32-gcc $(CFLAGS) -DNO_BEEP -o $(BIN_DIR)/windows/basic.exe $(INTERPRETER_DEPS) $(IO_STDIO)
+	i686-w64-mingw32-gcc $(CFLAGS) -DNO_BEEP -o $(BIN_DIR)/windows/basic.exe $(INTERPRETER_DEPS) $(WINDOWS_STUB)
 	@echo "Built: $(BIN_DIR)/windows/basic.exe"
 	$(MAKE) package-windows
 
 # =============================================================================
 # Windows 64-bit (MinGW x86_64)
 # =============================================================================
-windows64: dirs $(INTERPRETER_DEPS) $(IO_STDIO)
+windows64: dirs $(INTERPRETER_DEPS) $(WINDOWS64_STUB)
 	mkdir -p $(BIN_DIR)/windows64
-	x86_64-w64-mingw32-gcc $(CFLAGS) -DNO_BEEP -o $(BIN_DIR)/windows64/basic.exe $(INTERPRETER_DEPS) $(IO_STDIO)
+	x86_64-w64-mingw32-gcc $(CFLAGS) -DNO_BEEP -o $(BIN_DIR)/windows64/basic.exe $(INTERPRETER_DEPS) $(WINDOWS64_STUB)
 	@echo "Built: $(BIN_DIR)/windows64/basic.exe"
 	$(MAKE) package-windows64
 
 # =============================================================================
 # DOS - PC target (ia16-elf-gcc, 256-640K conventional memory)
 # =============================================================================
-dos: dirs $(INTERPRETER_DEPS) $(IO_STDIO)
+dos: dirs $(INTERPRETER_DEPS) $(DOS_STUB)
 	mkdir -p $(BIN_DIR)/dos
-	ia16-elf-gcc -mcmodel=small $(CFLAGS) -DNO_BEEP -o $(BIN_DIR)/dos/basic.exe $(INTERPRETER_DEPS) $(IO_STDIO) -li86
+	ia16-elf-gcc -mcmodel=small $(CFLAGS) -DNO_BEEP -o $(BIN_DIR)/dos/basic.exe $(INTERPRETER_DEPS) $(DOS_STUB) -li86
 	@echo "Built: $(BIN_DIR)/dos/basic.exe"
 	$(MAKE) package-dos
 
@@ -252,7 +256,10 @@ help:
 	@echo ""
 	@echo "Architecture:"
 	@echo "  BASIC_STAGE1.c      - Pure interpreter (no stdio, no malloc)"
-	@echo "  io_stdio.c          - Hosted I/O (Linux/Windows/DOS)"
+	@echo "  stubs/linux_stub.c  - Linux target stub (includes io_stdio.c)"
+	@echo "  stubs/windows_stub.c - Windows 32-bit stub (includes io_stdio.c)"
+	@echo "  stubs/windows64_stub.c - Windows 64-bit stub (includes io_stdio.c)"
+	@echo "  stubs/dos_stub.c    - DOS stub (includes io_stdio.c)"
 	@echo "  io_avr.c            - Bare metal AVR I/O"
 	@echo "  lexer.c             - Stage 2: Tokenizer module (optional)"
 	@echo ""

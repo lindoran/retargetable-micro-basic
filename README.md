@@ -159,6 +159,10 @@ Unary:   !  -              (bitwise NOT, unary minus)
 > IF (A + B) = (C + D) THEN 100
 > ```
 
+## Target stubs
+
+Stage1 itself only calls the exported HAL in `io.h`, so each build target now compiles a tiny stub in `stubs/<target>_stub.c` that pulls in the shared hosted implementation (`io_stdio.c`) or a bare-metal layer instead of touching `stdio.h` directly. The interpreter now depends on `basic_types.h`/`hal_base.h` for the portable typedefs and HAL prototypes, so all platform-specific logic lives in `hal_hosted.c` (or a future stub) instead. That keeps the interpreter clean and allows 3.0 relocatable ports to drop in their own stub file without changing `BASIC_STAGE1.c`. The existing host targets (`linux`, `windows`, `windows64`, `dos`) all include `io_stdio.c` via their respective stubs, while future bare-metal targets can swap in a different stub that talks to serial/flash rather than a filesystem.
+
 Bitwise operators sitting above comparisons is intentional — the most common use
 case is masking before testing, which then requires no parentheses:
 
