@@ -1,5 +1,7 @@
 # Enhanced Micro-Basic 2.2
 
+THIS IS A UNFINISHED WORKSPACE!
+
 A generative AI test to see if Claude.ai, using only the free plan (Sonnet 4.6),
 could cross-port the single-file BASIC example from David Dunfield's Micro-C
 compiler installer to GCC. We took this a few steps further and made it work with
