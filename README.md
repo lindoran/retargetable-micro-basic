@@ -1,4 +1,4 @@
-# Enhanced Micro-Basic 2.2
+# Enhanced Micro-Basic 2.3
 
 THIS IS A UNFINISHED WORKSPACE!
 
@@ -54,7 +54,9 @@ new stubs written for this port are MIT licensed.
 ## Language Overview
 
 This is integer BASIC. A brief summary is given below; the full command reference
-is in the manual in the `/documentation` folder.
+is in the manual in the `/documents/MICRO-BASIC-Manual.md` file.
+
+For a relocation overview and per-file checklist, see `documents/PORTING_GUIDE.md`.
 
 ### Control flow
 
@@ -237,7 +239,7 @@ PRINT STR$(A)          : REM  -1
 The `/documentation` folder contains:
 
 - `MICRO-BASIC.bnf` — Backus-Naur Form grammar
-- `MICRO-BASIC-Manual.docx` — full command reference and examples
+- `MICRO-BASIC-Manual.md` — full command reference and examples
 
 ## Building
 

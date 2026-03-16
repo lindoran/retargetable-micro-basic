@@ -1,0 +1,6 @@
+10 DATA 3, "HI", 9
+20 READ A, B$, C
+30 PRINT "A="; A
+40 PRINT "B="; B$
+50 PRINT "C="; C
+60 END

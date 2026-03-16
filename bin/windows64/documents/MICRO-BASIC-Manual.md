@@ -1,0 +1,505 @@
+# Enhanced Micro-Basic 2.3
+
+## Language Reference Manual
+
+## Introduction
+
+Enhanced Micro-Basic is a small integer BASIC interpreter derived from Dave Dunfield's Micro-Basic. It has been ported to GCC, MinGW, and ia16-elf-gcc, making it usable from 16-bit DOS through to modern 64-bit Linux and Windows.
+
+All numeric values are 16-bit values, referenced as signed integers by default for compatibility. The interpreter is single-file C and is designed to be easy to re-target to other architectures such as Z80 or 6809.
+
+The implementation is written in C; a disk OS is assumed, and heap management is performed by the compiler and standard library.
+
+## Variables
+
+Three families of variables are available, each with 260 slots (A0–Z9). The digit suffix may be omitted, so A is the same as A0, and Z$ is the same as Z0$.
+
+| Name pattern | Description |
+| --- | --- |
+| `A0–Z9` | Numeric (integer) variables — 260 slots |
+| `A0$–Z9$` | String variables — 260 slots |
+| `A0()–Z9()` | Numeric arrays — 260 slots (must be DIMensioned before use) |
+
+## Numeric Type
+
+All numeric values are stored as 16-bit quantities and are interpreted as signed by default (range −32768 to 32767).
+
+### Literals
+
+| Example | Format |
+| --- | --- |
+| `255`, `-128` | Plain signed decimal (no prefix) |
+| `#FF`, `#1A2B` | Hexadecimal — prefix `#` |
+| `@65535` | Unsigned decimal — prefix `@` |
+
+There is no binary prefix. Use hex for bit patterns: `#0F` instead of `%00001111`.
+
+## Operator Precedence
+
+Priority from highest to lowest:
+
+```
+Unary:   !  -              (bitwise NOT, unary minus)
+         &  |  ^  <<  >>   (bitwise and bit shift)
+         *  /  %           (multiplicative)
+         +  -  =  <>  <  <=  >  >=   (additive and comparison — same priority)
+```
+
+Note: Addition, subtraction, and comparisons share the same priority and are evaluated left to right. Always parenthesise when mixing arithmetic and comparisons:
+
+```
+IF (A + B) = (C + D) THEN 100
+```
+
+Bitwise operators sitting above comparisons is intentional — the most common use case is masking before testing, which then requires no parentheses:
+
+```
+IF A & 15 = 7 THEN 100    : REM evaluates as (A & 15) = 7
+```
+
+Expressions may be nested up to 8 levels deep.
+
+## Unsigned Comparison Functions
+
+The `<`, `<=`, `>`, `>=` operators are signed. Use these functions when values may exceed 32767:
+
+| Function | Returns |
+| --- | --- |
+| `UGT(a, b)` | 1 if `a > b` unsigned, 0 otherwise |
+| `ULT(a, b)` | 1 if `a < b` unsigned, 0 otherwise |
+
+## Fluidity of Type
+
+Type is fluid depending on reference context. This means the programmer has to track the type manually as all operations complete in their proper context. For example, `>`, `<`, `+`, `*`, `/`, `%`, and `-` output a result which is 2’s complement. There is no specific way to peek at operational overflow or sign after a calculation like assembly — as such, look-ahead mechanics with logic are required to detect these states.
+
+By contrast, bitwise `&`, `|`, `!` and `^` are all unsigned context, along with bit shift operations `<<` and `>>`. These specifically will modify the signed value of a number based on bit position, and therefore any operational overflow must be determined beforehand using look-ahead logic if needed. For the programmer’s benefit the highly useful `UGT()` and `ULT()` will perform a check on an unsigned number to determine if it is greater or less than another unsigned value.
+
+## Control Flow
+
+Traditional program flow: `GOTO`, `GOSUB`, `IF..THEN` can be used with line numbers or through relative or segmented offset.
+
+### Relative
+
+Relative offset is the fastest and can be performed in 1 line segments using the `+` notation. Relative offsets increase the line counter by the offset but are limited to short forward jumps between 1 and 127 lines. A reverse offset is not possible and requires a full segment slot, or scanning with line numbers.
+
+A relative offset is useful for things like `WHILE .. DO` or `IF .. THEN .. ELSE` flow, using flow control primitives to build these more complex structures.
+
+### Segmented
+
+Segmented offset gives the programmer the opportunity to flexibly assign a value to a segment “slot” which can be swapped or statically defined as the program flow dictates. A segment slot is defined by square brackets `[]` and is limited to 16 slots per program. The programmer uses `SEG [slot] = line` to set the slot value before it’s used. This triggers a full scan to set the pointer, so the most efficient way to use this feature is to call it early in the program to define the slot list before execution.
+
+Once set, BASIC checks the jump cache to find the line number link position, and can be adjusted by a forward offset as well using a `+` operation.
+
+This is useful for common jumps like `GOSUB` routines or backwards jump references in complex relative flow control. Another example is building jump table logic to replace multiple `IF .. THEN` statements, or creating a switch-case statement by way of the `+` offset. Offsets can be defined by a regular variable value, meaning these offsets can be combined with complex logic for building precise table selection logic without a lookup.
+
+### GOTO
+
+Unconditional jump. Accepts an absolute line number or a relative forward offset.
+
+```
+GOTO 100   : REM line seek
+GOTO +3    : REM relative
+GOTO [1]   : REM segmented
+GOTO [2]+2 : REM segmented offset
+```
+
+### GOSUB / RETURN
+
+Call a subroutine. Like `GOTO`, accepts an absolute line number or a relative forward offset. `RETURN` transfers control back to the statement following the `GOSUB`.
+
+```
+GOSUB 500    : REM line seek
+GOSUB +2     : REM relative
+GOSUB [4]    : REM segmented
+GOSUB [10]+5 : REM segmented offset
+RETURN
+```
+
+### IF ... THEN
+
+Evaluates a numeric expression. If the result is non-zero, executes the true branch.
+
+```
+IF expr THEN line-number     : REM jump to absolute line
+IF expr THEN +n              : REM relative forward jump
+IF expr THEN [n]             : REM segmented jump
+IF expr THEN [n]+offset      : REM segmented jump with forward offset
+IF expr THEN statement       : REM execute single statement inline
+```
+
+### LIF ... THEN
+
+Long IF: if the condition is true the remainder of the line (all statements separated by colons) is executed. If false, the entire line is skipped.
+
+```
+LIF A > 10 THEN PRINT "big" : GOSUB 900 : A = 0
+```
+
+### FOR / NEXT
+
+Counted loop. STEP defaults to 1 if omitted. The variable name on NEXT is optional but recommended for readability.
+
+```
+FOR I = 1 TO 10
+  PRINT I
+NEXT I
+
+FOR I = 10 TO 1 STEP -1
+  PRINT I
+NEXT
+```
+
+Nesting: There is a limit to the number of nested `FOR` and `GOSUB` statements.
+
+### Relative Jump Examples
+
+Wherever a line number is accepted by `GOTO`, `GOSUB`, or `IF ... THEN`, you may write `+n` instead of an absolute line number. The interpreter counts `n` lines forward from the currently executing line and jumps there.
+
+| Syntax | Meaning |
+| --- | --- |
+| `+1` | Jump to the next line |
+| `+2` | Skip one line, land on the second line after the current one |
+| `+n` | Jump forward `n` lines (`1 ≤ n ≤ 127`) |
+
+Relative jumps are particularly useful for short forward branches that would otherwise require a named target, keeping nearby logic visually together:
+
+```
+100 IF A = 0 THEN +2
+110 PRINT "A is not zero"
+120 PRINT "done"
+```
+
+Rules and restrictions:
+
+- `n` must be in the range 1 to 127. Zero or values above 127 produce a Line number error.
+- Jumping past the end of the program produces a Line number error.
+- Backward relative jumps using `-` are not supported and produce a Syntax error.
+- Relative jumps work identically in `GOTO`, `GOSUB`, and `IF ... THEN` contexts.
+- When used with `GOSUB +n`, `RETURN` brings execution back to the statement immediately following `GOSUB`.
+- `GOSUB` and `FOR` loops share the nesting limits. `FOR` loops take larger space in the stack than a `GOSUB`.
+
+## Statement Reference
+
+### BEEP freq, ms
+
+Generates a tone on the PC speaker. `freq` is the frequency in Hz; `ms` is the duration in milliseconds. On non-DOS targets this may produce a terminal bell or use ALSA.
+
+```
+BEEP 440, 500
+```
+
+### CLEAR
+
+Erases all variables (numeric, string, and arrays) without clearing the program.
+
+```
+CLEAR
+```
+
+### CLOSE #n
+
+Closes the file handle `n` (0–9) previously opened with `OPEN`.
+
+```
+CLOSE #1
+```
+
+### DATA
+
+Inline data items read by `READ`. DATA lines are skipped during normal execution and may appear anywhere in the program.
+
+```
+100 DATA 10, 20, "hello"
+```
+
+### DELAY ms
+
+Pauses execution for `ms` milliseconds.
+
+```
+DELAY 1000
+```
+
+### DIM var(size) [, ...]
+
+Allocates an array. Indices run from 0 to size (inclusive), so `DIM A(9)` creates a 10-element array.
+
+```
+DIM A(99), B(49)
+```
+
+### DOS "command"
+
+Executes an OS shell command. On real-mode DOS targets this uses INT 21h EXEC if available; on POSIX it calls `system()`. Has no effect on targets that do not support shell execution.
+
+```
+DOS "DIR"
+```
+
+### END
+
+Terminates program execution silently. Program only.
+
+```
+END
+```
+
+### EXIT
+
+Quits the interpreter entirely.
+
+```
+EXIT
+```
+
+### FOR v = init TO limit [STEP n]
+
+See Control Flow section.
+
+### GOSUB target
+
+Calls a subroutine at `target`, which may be an absolute line number or a relative forward offset (`+n`). See Relative Jumps for details.
+
+### GOTO target
+
+Unconditional jump to `target`, which may be an absolute line number or a relative forward offset (`+n`). See Relative Jumps for details.
+
+### IF expr THEN target | stmt
+
+Conditional branch. `target` may be an absolute line number or `+n`. See Relative Jumps and Control Flow.
+
+### INPUT ["prompt",] var
+
+Reads a value from the console. An optional string prompt is displayed before reading.
+
+```
+INPUT A
+INPUT "Enter name: ", N$
+INPUT #1, A
+```
+
+### LET var = expr
+
+Assigns a value to a variable. The LET keyword is optional.
+
+```
+LET A = 42
+B = A + 1
+N$ = "hello"
+```
+
+### LIF expr THEN stmts
+
+Long IF. See Control Flow section.
+
+### LIST [start [, end]]
+
+Lists program lines. With no arguments lists the whole program. A single line number lists just that line. Two line numbers list an inclusive range.
+
+```
+LIST
+LIST 100
+LIST 100, 200
+LIST #1, 100, 200
+```
+
+### LOAD "name"
+
+Loads a program from disk. The `.BAS` extension is added automatically. If called during a running program, variables are not cleared.
+
+```
+LOAD "MYPROG"
+```
+
+### NEW
+
+Clears both the program and all variables.
+
+```
+NEW
+```
+
+### NEXT [v]
+
+Ends a FOR loop. The variable name is optional.
+
+### OPEN #n, "name", "mode"
+
+Opens a file using standard `fopen` mode strings (`"r"`, `"w"`, `"a"`, `"rb"`, `"wb"`, etc.).
+
+```
+OPEN #1, "data", "r"
+```
+
+### ORDER line
+
+Sets the READ data pointer to the DATA statement on the given absolute line number.
+
+```
+ORDER 500
+```
+
+### OUT port, val
+
+Writes `val` to the given I/O port. Real-mode DOS targets only; no-op elsewhere.
+
+```
+OUT #60, 0
+```
+
+### PRINT [items]
+
+Prints to the console. Items are separated by `,` or `;`. A semicolon suppresses the space printed before a numeric value. A trailing `,` or `;` suppresses the newline.
+
+```
+PRINT "X = "; X
+PRINT A, B, C
+PRINT HEX$(A)
+```
+
+### READ var [, ...]
+
+Reads values from DATA statements in program order.
+
+```
+READ A, B, N$
+```
+
+### REM
+
+Comment. Everything from REM to the end of the statement is ignored.
+
+```
+REM this is a comment
+```
+
+### RETURN
+
+Returns from a GOSUB. Program only.
+
+### RUN [line]
+
+Runs the program from the beginning (or from the given line number). Clears variables first. Direct mode only.
+
+### SAVE ["name"]
+
+Saves the program to disk as `name.BAS`. If no name is given the last loaded/saved filename is reused. Direct mode only.
+
+```
+SAVE "MYPROG"
+```
+
+### STOP
+
+Halts with a message showing the current line number. Program only.
+
+```
+STOP
+```
+
+## Function Reference
+
+### Numeric functions
+
+| Function | Description |
+| --- | --- |
+| `ABS(n)` | Absolute value |
+| `ASC(s)` | ASCII code of the first character of `s` |
+| `INP(port)` | Read I/O port (real-mode DOS only; 0 elsewhere) |
+| `KEY()` | Non-blocking keyboard test; returns keycode or 0 |
+| `NUM(s)` | Convert string `s` to integer |
+| `RND(n)` | Random integer in range 0 to `n−1` |
+| `UGT(a, b)` | 1 if `a > b` (unsigned comparison), else 0 |
+| `ULT(a, b)` | 1 if `a < b` (unsigned comparison), else 0 |
+
+### String functions
+
+| Function | Description |
+| --- | --- |
+| `CHR$(n)` | Single character from ASCII code `n` |
+| `HEX$(n)` | Uppercase hexadecimal string, e.g. `FF`, `1A2B` |
+| `STR$(n)` | Signed decimal string, e.g. `-1` |
+| `UNS$(n)` | Unsigned decimal string, e.g. `65535` |
+
+Example:
+
+```
+A = #FFFF
+PRINT HEX$(A)    : REM  FFFF
+PRINT UNS$(A)    : REM  65535
+PRINT STR$(A)    : REM  -1
+```
+
+## PRINT Separators
+
+Items in a PRINT list may be separated by `,` or `;`. A semicolon suppresses the space that would otherwise appear before a numeric value. Neither implements print zones. A trailing `,` or `;` suppresses the newline.
+
+```
+PRINT "X = "; X          : REM  no space between label and value
+PRINT "A = "; A, "B = "; B  : REM  mix freely
+```
+
+## File I/O
+
+Up to 10 file handles (`#0–#9`) may be open simultaneously (4 on `SMALL_TARGET` builds). Handles are opened with `OPEN`, used by `INPUT#`, `PRINT#`, `LIST#`, and closed with `CLOSE`.
+
+```
+OPEN #1, "data", "r"
+INPUT #1, A
+PRINT #1, A
+LIST #1, 100, 200
+CLOSE #1
+```
+
+`LOAD` and `SAVE` always operate on named disk files and do not use numbered handles.
+
+## Error Messages
+
+| Message | Meaning |
+| --- | --- |
+| Syntax | Unrecognised syntax or unexpected character |
+| Illegal program | Statement is only valid in a running program |
+| Illegal direct | Statement is only valid in direct (immediate) mode |
+| Line number | Target line not found, or relative offset out of range or past end of program |
+| Wrong type | Numeric value where string expected or vice versa |
+| Divide by zero | Division or modulo by zero |
+| Nesting | `FOR`/`NEXT` or `GOSUB`/`RETURN` mismatch |
+| File not open | File handle used without a prior `OPEN` |
+| File already open | `OPEN` on a handle that is already in use |
+| Input | Bad input reading from a file |
+| Dimension | Array not DIMensioned, or subscript out of range |
+| Data | `READ`/`DATA` mismatch |
+| Out of memory | Memory allocation failed |
+| Expression too deep | Expression nested more than 8 levels |
+
+## Building
+
+| Target | Toolchain |
+| --- | --- |
+| `make linux` | GCC / Linux |
+| `make linux-nobeep` | GCC / Linux (no sound) |
+| `make windows` | MinGW 32-bit cross |
+| `make windows64` | MinGW 64-bit cross |
+| `make dos` | ia16-elf-gcc, normal model |
+
+To retarget to Z80 or 6809 adjust only the typedef block at the top of `BASIC_STAGE1.c` (`bint`, `ubint`, `bptr`) and the platform HAL section. No other changes are needed for the numeric types.
+
+## Small-Target Tuning
+
+Compile with `-DSMALL_TARGET` to enable conservative defaults for 64 KB address spaces. Individual values can also be overridden on the command line:
+
+```
+gcc -DBUFFER_SIZE=80 -DNUM_VAR=130 -DCTL_DEPTH=12 ...
+```
+
+| Define | Effect |
+| --- | --- |
+| `BUFFER_SIZE` | Input line buffer size in bytes (default 100, small 80) |
+| `SA_SIZE` | String accumulator capacity in bytes (default 100, small 80) |
+| `NUM_VAR` | Variable slots: 260 full, 130 half, 52 minimal |
+| `CTL_DEPTH` | Control stack depth (default 50, small 24) |
+| `MAX_FILES` | Open file handles (default 10, small 4) |
+
+## Licence
+
+Micro-Basic is copyright 1982–2003 Dave Dunfield. Permission is granted for personal (non-commercial) use. The Enhanced Micro-Basic port carries the same restriction. New stubs written for the GCC/ia16 port are MIT licensed.

@@ -4,11 +4,11 @@
  * This is the sole interface through which BASIC.c performs I/O.
  * All stdio, file operations, and memory allocation are hidden behind
  * these functions. The interpreter is completely independent of the
- * host platform (hosted Linux/Windows/DOS or bare metal AVR/Z80/etc).
+ * host platform (hosted Linux/Windows/DOS or bare metal Z80/6809/etc).
  *
  * Implementations:
  *   io_stdio.c   — hosted systems (wraps stdio.h and stdlib.h)
- *   io_avr.c     — bare metal AVR (wraps BIOS layer)
+ *   io_xxx.c     — bare metal target I/O (wraps BIOS/serial layer)
  *   io_stub.c    — minimal no-op template for new ports
  *
  * BASIC.c includes this header only; never includes stdio.h or stdlib.h.
@@ -63,7 +63,7 @@ typedef void IO_FILE;
  * mode: "rb" (read binary), "wb" (write binary)
  * Returns NULL on failure (file not found, permission denied, no filesystem).
  * On bare metal without a filesystem, this always returns NULL (LOAD/SAVE
- * become serial operations in io_avr.c, not file operations in the interpreter). */
+ * become serial operations in io_xxx.c, not file operations in the interpreter). */
 IO_FILE *io_fopen(const char *name, const char *mode);
 
 /* io_fclose(fp) — close a file

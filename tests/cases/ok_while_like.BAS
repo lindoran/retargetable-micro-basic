@@ -1,0 +1,6 @@
+10 A = 0
+20 IF A >= 3 THEN +3
+30 A = A + 1
+40 GOTO 20
+50 PRINT A
+60 END

@@ -54,6 +54,7 @@ static void delay(ubint ms)
 
 void do_beep(ubint freq, ubint ms)
 {
+    if (freq == 0) { delay(ms); return; }
     ubint divisor = (ubint)(1193180UL / freq);
     outp(0x43, 0xB6);
     outp(0x42, (uint8_t)(divisor & 0xFF));
@@ -74,7 +75,11 @@ void  do_out(ubint p, ubint v)    { outp(p, (uint8_t)v); }
 #  include <windows.h>
 #  include <conio.h>
 
-void  do_beep(ubint freq, ubint ms) { Beep(freq, ms); }
+void  do_beep(ubint freq, ubint ms)
+{
+    if (freq == 0) { Sleep(ms); return; }
+    Beep(freq, ms);
+}
 void  do_delay(ubint ms)            { Sleep(ms); }
 bint  kbtst(void)  { return (bint)(_kbhit() ? _getch() : 0); }
 ubint do_in(ubint p)               { (void)p; return 0; }
@@ -95,9 +100,17 @@ void  do_out(ubint p, ubint v)     { (void)p; (void)v; }
 #  ifndef NO_BEEP
 #    include <alsa/asoundlib.h>
 #    include "tinybeep.h"
-void do_beep(ubint freq, ubint ms) { tinybeep(freq, ms); }
+void do_beep(ubint freq, ubint ms)
+{
+    if (freq == 0) { do_delay(ms); return; }
+    tinybeep(freq, ms);
+}
 #  else
-void do_beep(ubint freq, ubint ms) { (void)freq; (void)ms; }
+void do_beep(ubint freq, ubint ms)
+{
+    (void)freq;
+    do_delay(ms);
+}
 #  endif
 
 void do_delay(ubint ms)

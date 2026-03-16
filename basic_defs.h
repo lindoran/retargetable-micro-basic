@@ -10,6 +10,8 @@
 #include <stdint.h>
 
 #if defined(AVR_PROGMEM) || defined(__AVR__)
+/* Pre-work note: this AVR PROGMEM support is retained for future bare-metal
+ * ports. The current repo does not ship an AVR target or io_avr.c. */
 #  include <avr/pgmspace.h>
 #  define RODATA          PROGMEM
 #  define RD_BYTE(p)      pgm_read_byte(p)

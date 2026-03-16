@@ -419,6 +419,9 @@ static ubint get_num(void)
 
     } else {                                /* --- plain signed decimal --- */
         while (isdigit((unsigned char)(c = *cmdptr))) {
+            if (value > (ubint)6553 || (value == (ubint)6553 && (ubint)(c - '0') > (ubint)5)) {
+                error(0);
+            }
             ++cmdptr;
             value = (ubint)(value * 10 + (ubint)(c - '0')); }
     }
@@ -433,11 +436,14 @@ static ubint get_num(void)
 static void delete_line(ubint lino)
 {
     struct line_rec *cur, *prev = NULL;
+    ubint i;
     for (cur = pgm_start; cur; prev = cur, cur = cur->Llink) {
         if (cur->Lnumber == lino) {
             if (prev) prev->Llink = cur->Llink;
             else      pgm_start   = cur->Llink;
             io_free(cur);
+            for (i = 1; i <= SEG_SLOTS; i++)
+                if (seg_cache[i] && seg_cache[i]->Lnumber == lino) seg_cache[i] = NULL;
             /* if we deleted the tail, rescan for new tail */
             if (pgm_end == cur) {
                 pgm_end = NULL;
@@ -451,6 +457,7 @@ static void insert_line(ubint lino)
     struct line_rec *node, *cur, *prev = NULL;
     char            *src = cmdptr;
     ubint            len;
+    ubint            i;
 
     for (len = (ubint)sizeof(struct line_rec); *src; ++len, ++src) ;
     node = (struct line_rec *)io_alloc((ubint)(len + 1));
@@ -466,6 +473,9 @@ static void insert_line(ubint lino)
 
     /* if node has no successor it is the new tail */
     if (!node->Llink) pgm_end = node;
+
+    for (i = 1; i <= SEG_SLOTS; i++)
+        if (seg_cache[i] && seg_cache[i]->Lnumber == lino) seg_cache[i] = node;
 }
 
 /* =======================================================================
@@ -871,6 +881,7 @@ newline:
 
     /* ---- CLOSE#n ------------------------------------------------------- */
     case CLOSE :
+        if (skip_blank() != '#') error(0);
         i = (ubint)chk_file(1);
         if (!filein) error(8);
         io_fclose(files[i]); files[i] = NULL; /* HAL(3.0): stub or remove */
@@ -1205,7 +1216,7 @@ static bint get_value(void)
             if (value < 0) value = (bint)-value;
             goto number_only;
 
-        // TODO: XOR SHIFT on 8 bit targets - needs to be stubbed out for 3.0
+        /* TODO(3.0): replace rand() with a tiny 8-bit-friendly PRNG and seed source. */
         case TOKEN(RND) : {             /* RND(n) -> 0..n-1                 */
             ubint range = (ubint)eval_sub();
             value = range ? (bint)(rand() % (int)range) : 0;
@@ -1327,10 +1338,14 @@ static bint do_arith(int opr, bint op1, bint op2)
     case EQ -(ADD-1): return (bint)(op1 == op2);
     case NE -(ADD-1): return (bint)(op1 != op2);
     case LE -(ADD-1): return (bint)(op1 <= op2);
-    case SHL-(ADD-1): return (bint)((ubint)op1 << op2);  /* logical shift */
+    case SHL-(ADD-1):
+        if (op2 < 0 || op2 >= (bint)(sizeof(ubint) * 8)) error(0);
+        return (bint)((ubint)op1 << op2);  /* logical shift */
     case LT -(ADD-1): return (bint)(op1 <  op2);
     case GE -(ADD-1): return (bint)(op1 >= op2);
-    case SHR-(ADD-1): return (bint)((ubint)op1 >> op2);  /* logical shift */
+    case SHR-(ADD-1):
+        if (op2 < 0 || op2 >= (bint)(sizeof(ubint) * 8)) error(0);
+        return (bint)((ubint)op1 >> op2);  /* logical shift */
     case GT -(ADD-1): return (bint)(op1 >  op2);
     default: error(0); return 0; }
 }
@@ -1442,6 +1457,8 @@ static void clear_pgm(void)
     pgm_start = NULL;
     pgm_end   = NULL;
     for (i = 1; i <= SEG_SLOTS; i++) seg_cache[i] = NULL;
+    readptr = NULL;
+    dataptr = NULL;
 }
 
 static void clear_vars(void)
@@ -1486,11 +1503,9 @@ static ubint get_var(void)
  * ======================================================================= */
 int main(int argc, char *argv[])
 {
-    /* 
-       
-       TODO: Implement XOR SHFIT for RND in 8 bit targets for 3.0 relese 
-       will need a stub to manage this seed as well from whatever is aval.
-    
+    /*
+     * TODO(3.0): implement an 8-bit-friendly PRNG for RND()
+     * and provide a small target-specific seed source.
      */
     hal_init_audio();
     srand((unsigned)time(NULL));  /* seed RND() from current time */

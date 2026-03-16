@@ -1,0 +1,6 @@
+10 A = 1
+20 PRINT "X="; A
+30 PRINT "A=", A
+40 PRINT "END";
+50 PRINT "!"
+60 END

@@ -1,0 +1,5 @@
+10 A = #00FF
+20 PRINT "HEX="; HEX$(A)
+30 PRINT "UNS="; UNS$(A)
+40 PRINT "STR="; STR$(A)
+50 END

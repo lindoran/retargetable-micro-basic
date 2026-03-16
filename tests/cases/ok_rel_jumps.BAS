@@ -1,0 +1,5 @@
+10 A = 0
+20 IF A = 0 THEN +2
+30 PRINT "BAD"
+40 PRINT "OK"
+50 END

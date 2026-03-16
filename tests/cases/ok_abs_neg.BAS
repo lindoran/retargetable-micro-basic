@@ -1,0 +1,3 @@
+10 A = -5
+20 PRINT ABS(A)
+30 END

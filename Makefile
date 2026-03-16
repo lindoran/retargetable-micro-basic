@@ -12,7 +12,7 @@
 #   make windows      -> MinGW 32-bit cross (i686-w64-mingw32-gcc)
 #   make windows64    -> MinGW 64-bit cross (x86_64-w64-mingw32-gcc)
 #   make dos          -> ia16-elf-gcc, PC DOS target (256-640K)
-#   make avr          -> ATmega2560 (avr-gcc) — requires hardware
+#   (avr target removed for now)
 #   make build-all    -> linux, windows, windows64, dos
 #   make clean        -> remove all built binaries and packages
 #
@@ -33,11 +33,9 @@ LINUX_STUB     = stubs/linux_stub.c
 WINDOWS_STUB   = stubs/windows_stub.c
 WINDOWS64_STUB = stubs/windows64_stub.c
 DOS_STUB       = stubs/dos_stub.c
-IO_AVR      = io_avr.c
 
 # Compiler flags
 CFLAGS      = -std=c99 -Wall -Wextra -O2
-CFLAGS_AVR  = -std=c99 -Wall -O2
 
 # Directories
 BIN_DIR     = bin
@@ -47,23 +45,18 @@ DOCS_DIR    = documents
 # Optional tuning defines
 ifdef NUM_VAR
   CFLAGS += -DNUM_VAR=$(NUM_VAR)
-  CFLAGS_AVR += -DNUM_VAR=$(NUM_VAR)
 endif
 ifdef CTL_DEPTH
   CFLAGS += -DCTL_DEPTH=$(CTL_DEPTH)
-  CFLAGS_AVR += -DCTL_DEPTH=$(CTL_DEPTH)
 endif
 ifdef SA_SIZE
   CFLAGS += -DSA_SIZE=$(SA_SIZE)
-  CFLAGS_AVR += -DSA_SIZE=$(SA_SIZE)
 endif
 ifdef BUFFER_SIZE
   CFLAGS += -DBUFFER_SIZE=$(BUFFER_SIZE)
-  CFLAGS_AVR += -DBUFFER_SIZE=$(BUFFER_SIZE)
 endif
 ifdef MAX_FILES
   CFLAGS += -DMAX_FILES=$(MAX_FILES)
-  CFLAGS_AVR += -DMAX_FILES=$(MAX_FILES)
 endif
 
 # Interpreter dependencies
@@ -73,7 +66,7 @@ INTERPRETER_DEPS = $(INTERPRETER)
 HAVE_ALSA ?= 1
 
 # =============================================================================
-.PHONY: all linux linux-nobeep windows windows64 dos avr clean dirs \
+.PHONY: all linux linux-nobeep windows windows64 dos clean dirs test \
         package-linux package-windows package-windows64 package-dos \
         build-all package-all clean-bins
 
@@ -118,9 +111,9 @@ endif
 	$(MAKE) package-linux
 
 # Linux without ALSA (fallback)
-linux-nobeep: dirs $(INTERPRETER_DEPS) $(IO_STDIO)
+linux-nobeep: dirs $(INTERPRETER_DEPS) $(LINUX_STUB)
 	mkdir -p $(BIN_DIR)/linux
-	gcc $(CFLAGS) -DNO_BEEP -o $(BIN_DIR)/linux/basic $(INTERPRETER_DEPS) $(IO_STDIO)
+	gcc $(CFLAGS) -DNO_BEEP -o $(BIN_DIR)/linux/basic $(INTERPRETER_DEPS) $(LINUX_STUB)
 	@echo "Built: $(BIN_DIR)/linux/basic (no sound)"
 	$(MAKE) package-linux
 
@@ -150,18 +143,6 @@ dos: dirs $(INTERPRETER_DEPS) $(DOS_STUB)
 	ia16-elf-gcc -mcmodel=small $(CFLAGS) -DNO_BEEP -o $(BIN_DIR)/dos/basic.exe $(INTERPRETER_DEPS) $(DOS_STUB) -li86
 	@echo "Built: $(BIN_DIR)/dos/basic.exe"
 	$(MAKE) package-dos
-
-# =============================================================================
-# AVR (ATmega2560 on Arduino Mega)
-# Requires: avr-gcc, avrdude
-# Note: This builds a .elf for flashing; does not package automatically.
-# Flash with: avrdude -p m2560 -c stk500v2 -P /dev/ttyUSB0 -U flash:w:basic.elf:e
-# =============================================================================
-avr: dirs $(INTERPRETER_DEPS) $(IO_AVR)
-	mkdir -p $(BIN_DIR)/avr
-	avr-gcc $(CFLAGS_AVR) -mmcu=atmega2560 -DSMALL_TARGET -o $(BIN_DIR)/avr/basic.elf $(INTERPRETER_DEPS) $(IO_AVR)
-	@echo "Built: $(BIN_DIR)/avr/basic.elf (ready for avrdude)"
-	@echo "Flash: avrdude -p m2560 -c stk500v2 -P /dev/ttyUSB0 -U flash:w:$(BIN_DIR)/avr/basic.elf:e"
 
 # =============================================================================
 # Packaging rules
@@ -225,12 +206,10 @@ help:
 	@echo "  make dos            - ia16-elf-gcc DOS (256-640K)"
 	@echo "  make build-all      - All of the above"
 	@echo ""
-	@echo "Bare Metal:"
-	@echo "  make avr            - ATmega2560 (Arduino Mega)"
-	@echo ""
 	@echo "Utilities:"
 	@echo "  make clean          - Remove all binaries and packages"
 	@echo "  make clean-bins     - Remove binaries only, keep .zip packages"
+	@echo "  make test           - Build linux-nobeep and run BASIC tests"
 	@echo "  make help           - This message"
 	@echo ""
 	@echo "Options:"
@@ -243,7 +222,6 @@ help:
 	@echo ""
 	@echo "Examples:"
 	@echo "  make linux NUM_VAR=52 SA_SIZE=80   - Minimal Linux build"
-	@echo "  make avr SMALL_TARGET=1            - ATmega2560 with small footprint"
 	@echo "  make dos            - DOS .exe with standard config"
 	@echo ""
 	@echo "Architecture:"
@@ -252,10 +230,14 @@ help:
 	@echo "  stubs/windows_stub.c - Windows 32-bit stub (includes io_stdio.c)"
 	@echo "  stubs/windows64_stub.c - Windows 64-bit stub (includes io_stdio.c)"
 	@echo "  stubs/dos_stub.c    - DOS stub (includes io_stdio.c)"
-	@echo "  io_avr.c            - Bare metal AVR I/O"
-	@echo ""
 	@echo "Documentation:"
 	@echo "  INDEX.md            - Overview of all deliverables"
-	@echo "  PORTING_GUIDE.md    - How to port to new platforms"
-	@echo "  QUICK_REFERENCE.md  - Build commands for common targets"
-	@echo "  STAGE_2_PLAN.md     - Lexer extraction details"
+	@echo "  PORTING_GUIDE.md    - How to port to new platforms (if present)"
+	@echo "  QUICK_REFERENCE.md  - Build commands for common targets (if present)"
+	@echo "  STAGE_2_PLAN.md     - Lexer extraction details (if present)"
+
+# =============================================================================
+# Tests
+# =============================================================================
+test: linux-nobeep
+	./scripts/run_tests.sh

@@ -1,0 +1,5 @@
+10 A = @65535
+20 B = 0
+30 PRINT "UGT="; UGT(A, B)
+40 PRINT "ULT="; ULT(B, A)
+50 END
