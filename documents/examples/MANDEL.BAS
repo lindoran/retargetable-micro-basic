@@ -1,5 +1,5 @@
 1 REM =====================================================
-2 REM Mandelbrot - Q8 fixed point, Enhanced Micro-Basic 2.3
+2 REM Mandelbrot - Q8 fixed point, Enhanced Micro-Basic 3.0
 3 REM Q8: 1.0=256  2.0=512  -2.5=-640
 4 REM Escape: |z|^2 > 4  =>  P+Q > 1024
 5 REM =====================================================

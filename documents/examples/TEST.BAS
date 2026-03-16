@@ -1,5 +1,5 @@
 10 REM =====================================================
-20 REM  Enhanced Micro-Basic 2.3 - operator test
+20 REM  Enhanced Micro-Basic 3.0 - operator test
 30 REM  Tests: # @ literals, << >>, UGT(), ULT()
 40 REM =====================================================
 50 REM

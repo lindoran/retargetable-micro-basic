@@ -1,4 +1,4 @@
-# Enhanced Micro-Basic 2.3
+# Enhanced Micro-Basic 3.0
 
 ## Language Reference Manual
 

@@ -1,5 +1,5 @@
 # =============================================================================
-# ENHANCED MICRO-BASIC 2.3 (Stage 1 Refactored) - Makefile
+# ENHANCED MICRO-BASIC 3.0 (Stage 1 Refactored) - Makefile
 #
 # Architecture:
 #   - BASIC_STAGE1.c   : Pure interpreter (no stdio/malloc)
@@ -196,7 +196,7 @@ clean-bins:
 # =============================================================================
 
 help:
-	@echo "Enhanced Micro-BASIC 2.3 (Stage 1 Refactored) - Build Targets"
+	@echo "Enhanced Micro-BASIC 3.0 (Stage 1 Refactored) - Build Targets"
 	@echo ""
 	@echo "Hosted Systems:"
 	@echo "  make linux          - GCC/Linux with ALSA sound"

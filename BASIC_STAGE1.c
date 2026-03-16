@@ -113,8 +113,8 @@
  * Nothing else in the source should contain a version number string.
  * ======================================================================= */
 #define FORK_NAME        "Enhanced Micro-Basic"
-#define FORK_VER_MAJOR   2
-#define FORK_VER_MINOR   3
+#define FORK_VER_MAJOR   3
+#define FORK_VER_MINOR   0
 #define BASE_VER_STR     "Micro-Basic 2.1"
 #define BUILD_YEAR       "2026"
 
