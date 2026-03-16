@@ -4,7 +4,6 @@
 # Architecture:
 #   - BASIC_STAGE1.c   : Pure interpreter (no stdio/malloc)
 #   - io_<platform>.c  : Platform-specific I/O implementation
-#   - lexer.c          : Tokenizer module (Stage 2, optional)
 #
 # Targets:
 #   make              -> linux (default)
@@ -35,7 +34,6 @@ WINDOWS_STUB   = stubs/windows_stub.c
 WINDOWS64_STUB = stubs/windows64_stub.c
 DOS_STUB       = stubs/dos_stub.c
 IO_AVR      = io_avr.c
-LEXER       = lexer.c
 
 # Compiler flags
 CFLAGS      = -std=c99 -Wall -Wextra -O2
@@ -68,13 +66,8 @@ ifdef MAX_FILES
   CFLAGS_AVR += -DMAX_FILES=$(MAX_FILES)
 endif
 
-# Optional: compile with Stage 2 lexer module
-USE_LEXER ?= 0
-ifeq ($(USE_LEXER),1)
-  INTERPRETER_DEPS = $(INTERPRETER) $(LEXER)
-else
-  INTERPRETER_DEPS = $(INTERPRETER)
-endif
+# Interpreter dependencies
+INTERPRETER_DEPS = $(INTERPRETER)
 
 # Sound support
 HAVE_ALSA ?= 1
@@ -247,7 +240,6 @@ help:
 	@echo "  BUFFER_SIZE=N       - Input line buffer size (default 100, small 80)"
 	@echo "  MAX_FILES=N         - Number of file handles (default 10, small 4)"
 	@echo "  HAVE_ALSA=0         - Disable ALSA sound support (Linux)"
-	@echo "  USE_LEXER=1         - Include Stage 2 lexer module"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make linux NUM_VAR=52 SA_SIZE=80   - Minimal Linux build"
@@ -261,7 +253,6 @@ help:
 	@echo "  stubs/windows64_stub.c - Windows 64-bit stub (includes io_stdio.c)"
 	@echo "  stubs/dos_stub.c    - DOS stub (includes io_stdio.c)"
 	@echo "  io_avr.c            - Bare metal AVR I/O"
-	@echo "  lexer.c             - Stage 2: Tokenizer module (optional)"
 	@echo ""
 	@echo "Documentation:"
 	@echo "  INDEX.md            - Overview of all deliverables"
