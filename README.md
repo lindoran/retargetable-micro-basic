@@ -15,6 +15,7 @@ single-file.
 The next bit we wanted to tackle was making Micro-Basic into a relocatable BASIC interpreter. It is by no means small like an assembly BASIC—if you want that, that is what you have to write—but this should run on a disk-based operating system with little issue, and is general enough at its core to run on a bare-metal environment. What I'll try to do is mock up something on an AVR using an SD-Card module to show how easy it is now to bring it to any other ANSI C compiler.
 
 For now the groundwork is here if you want to play around with it. Generally speaking you can stub out your own build and get things working that way. Everything here compiles for and runs on just about any console that Microsoft produced and also Linux. Have fun!
+
 ---
 
 ## What this is
