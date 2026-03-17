@@ -1,6 +1,6 @@
 # Enhanced Micro-Basic 3.0
 
-A generative AI test to see if Claude.ai, using only the free plan (Sonnet 4.6),
+The original project, A generative AI test to see if Claude.ai, using only the free plan (Sonnet 4.6),
 could cross-port the single-file BASIC example from David Dunfield's Micro-C
 compiler installer to GCC. We took this a few steps further and made it work with
 MinGW and IA16-ELF to fully support 16-bit DOS all the way to modern times.
@@ -9,6 +9,10 @@ language features while keeping the same philosophy of small, portable, and
 single-file.
 
 **This was a successful project.**
+
+For the retargetable project, we did a bunch of agrigated iterative mark downs, trying to get the AI to work through a reloacatable version.  What we came up with isn't entirely the work of AI.  A lot of this work is simply putting together headers, and stubbing out the C files so that the AI could fill in the gaps with the tedious work.  This worked well, I am pleased with the results.
+
+for this phase of the project we used codex to put together all of the markdown data and build the project files.  This worked after a few tries.
 
 ## 3.0 and Beyond
 
